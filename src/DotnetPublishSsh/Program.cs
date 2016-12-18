@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using Newtonsoft.Json;
 
 namespace DotnetPublishSsh
 {
@@ -36,10 +38,47 @@ namespace DotnetPublishSsh
             Console.WriteLine();
             Console.WriteLine($"Uploading {localFiles.Count} files to {options.User}@{options.User}:{options.Port}{options.Path}");
 
+            var md5CheckSums = new Dictionary<string, string>();
+            using (var md5 = MD5.Create())
+            {
+                foreach (var file in localFiles)
+                {
+                    using (var stream = File.OpenRead(file.RelativeName))
+                    {
+                        md5CheckSums.Add(file.RelativeName, BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", string.Empty));
+                    }
+                }
+            }
+
+
             try
             {
                 var uploader = new Uploader(options);
-
+                Dictionary<string, string> md5CheckSumsServer = null;
+                try
+                {
+                    string checkSums = null;
+                    checkSums = uploader.DownloadFile(path + "/md5CheckSums.json");
+                    md5CheckSumsServer = JsonConvert.DeserializeObject<Dictionary<string, string>>(checkSums);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error dowloading md5CheckSums from server: {ex.Message}");
+                }
+                if (md5CheckSumsServer != null)
+                {
+                    for (int i = 0; i < localFiles.Count; i++)
+                    {
+                        if (md5CheckSumsServer.ContainsKey(localFiles[i].RelativeName))
+                        {
+                            if(!md5CheckSumsServer[localFiles[i].RelativeName].Equals(md5CheckSums[localFiles[i].RelativeName]))
+                            {
+                                localFiles.RemoveAt(i);
+                                i--;
+                            }
+                        }
+                    }
+                }
                 uploader.UploadFiles(path, localFiles);
             }
             catch (Exception ex)

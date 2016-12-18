@@ -2,14 +2,13 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Renci.SshNet;
 
 namespace DotnetPublishSsh
 {
     internal sealed class Uploader
     {
-        public char DirectorySeparator { get; set; } = '/';
-
         private readonly ConnectionInfo _connectionInfo;
         private readonly HashSet<string> _existingDirectories = new HashSet<string>();
 
@@ -17,6 +16,8 @@ namespace DotnetPublishSsh
         {
             _connectionInfo = CreateConnectionInfo(publishSshOptions);
         }
+
+        public char DirectorySeparator { get; set; } = '/';
 
         private static ConnectionInfo CreateConnectionInfo(PublishSshOptions options)
         {
@@ -41,10 +42,8 @@ namespace DotnetPublishSsh
 
         public void UploadFiles(string path, ICollection<LocalFile> localFiles)
         {
-            //using (var client = new SshClient(_connectionInfo))
             using (var ftp = new SftpClient(_connectionInfo))
             {
-                //client.Connect();
                 ftp.Connect();
 
                 foreach (var localFile in localFiles)
@@ -53,6 +52,23 @@ namespace DotnetPublishSsh
                 }
             }
             Console.WriteLine($"Uploaded {localFiles.Count} files.");
+        }
+
+        public string DownloadFile(string path)
+        {
+            using (var ftp = new SftpClient(_connectionInfo))
+            {
+                using (var stream = new MemoryStream())
+                {
+                    ftp.Connect();
+                    
+                    ftp.DownloadFile(path, stream);
+                    using (StreamReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }
+            }
         }
 
         private void UploadFile(LocalFile localFile, SftpClient ftp, string path)
